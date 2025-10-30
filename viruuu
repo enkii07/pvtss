@@ -1,0 +1,385 @@
+-- Blox Fruits ESP System (Educational Purpose Only)
+local ESP = {
+    Enabled = false,
+    Fruits = {},
+    ESPObjects = {},
+    UI = nil
+}
+
+-- Fruit detection colors with rarity
+local FruitColors = {
+    Common = Color3.fromRGB(255, 255, 255),
+    Uncommon = Color3.fromRGB(0, 255, 0),
+    Rare = Color3.fromRGB(0, 0, 255),
+    Legendary = Color3.fromRGB(255, 0, 255),
+    Mythical = Color3.fromRGB(255, 215, 0)
+}
+
+-- Fruit rarity mapping
+local FruitRarity = {
+    -- Common
+    ["Kilo"] = "Common", ["Spin"] = "Common", ["Chop"] = "Common", ["Spring"] = "Common", ["Bomb"] = "Common",
+    
+    -- Uncommon  
+    ["Smoke"] = "Uncommon", ["Spike"] = "Uncommon", ["Flame"] = "Uncommon", ["Falcon"] = "Uncommon", ["Ice"] = "Uncommon",
+    ["Sand"] = "Uncommon", ["Dark"] = "Uncommon", ["Diamond"] = "Uncommon", ["Light"] = "Uncommon", ["Rubber"] = "Uncommon",
+    ["Barrier"] = "Uncommon", ["Ghost"] = "Uncommon", ["Magma"] = "Uncommon", ["Quake"] = "Uncommon", ["Love"] = "Uncommon",
+    ["Spider"] = "Uncommon", ["Sound"] = "Uncommon", ["Phoenix"] = "Uncommon", ["Rumble"] = "Uncommon", ["Pain"] = "Uncommon",
+    ["Gravity"] = "Uncommon", ["Venom"] = "Uncommon",
+    
+    -- Rare
+    ["Shadow"] = "Rare", ["Blizzard"] = "Rare", ["Control"] = "Rare", ["T-Rex"] = "Rare", ["Dough"] = "Rare",
+    ["Spirit"] = "Rare", ["Tiger"] = "Rare", ["Leopard"] = "Rare", ["Mammoth"] = "Rare", ["Yeti"] = "Rare",
+    
+    -- Legendary
+    ["Buddha"] = "Legendary", ["Lightning"] = "Legendary", ["Gas"] = "Legendary", ["Dragon"] = "Legendary",
+    
+    -- Mythical
+    ["Kitsune"] = "Mythical"
+}
+
+-- Create simple UI
+function ESP:CreateUI()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "FruitESP"
+    ScreenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 250, 0, 120)
+    MainFrame.Position = UDim2.new(0, 10, 0, 10)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Parent = ScreenGui
+    
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Size = UDim2.new(0.8, 0, 0.3, 0)
+    ToggleButton.Position = UDim2.new(0.1, 0, 0.1, 0)
+    ToggleButton.Text = "ESP: OFF"
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+    ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleButton.Parent = MainFrame
+    
+    local StatusLabel = Instance.new("TextLabel")
+    StatusLabel.Size = UDim2.new(0.8, 0, 0.3, 0)
+    StatusLabel.Position = UDim2.new(0.1, 0, 0.45, 0)
+    StatusLabel.Text = "Fruits Found: 0"
+    StatusLabel.BackgroundTransparency = 1
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    StatusLabel.Parent = MainFrame
+    
+    local InfoLabel = Instance.new("TextLabel")
+    InfoLabel.Size = UDim2.new(0.8, 0, 0.3, 0)
+    InfoLabel.Position = UDim2.new(0.1, 0, 0.8, 0)
+    InfoLabel.Text = "Color: White=Common, Green=Uncommon, Blue=Rare, Pink=Legendary, Gold=Mythical"
+    InfoLabel.BackgroundTransparency = 1
+    InfoLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    InfoLabel.TextScaled = true
+    InfoLabel.Parent = MainFrame
+    
+    -- Toggle functionality
+    ToggleButton.MouseButton1Click:Connect(function()
+        ESP.Enabled = not ESP.Enabled
+        if ESP.Enabled then
+            ToggleButton.Text = "ESP: ON"
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+            ESP:StartESP()
+        else
+            ToggleButton.Text = "ESP: OFF"
+            ToggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+            ESP:StopESP()
+        end
+    end)
+    
+    self.UI = {
+        ScreenGui = ScreenGui,
+        StatusLabel = StatusLabel
+    }
+end
+
+-- Get color based on fruit rarity
+function ESP:GetFruitColor(fruitName)
+    for fruitPattern, rarity in pairs(FruitRarity) do
+        if string.find(fruitName:lower(), fruitPattern:lower()) then
+            return FruitColors[rarity]
+        end
+    end
+    return FruitColors.Common -- Default color
+end
+
+-- Fruit detection function
+function ESP:ScanForFruits()
+    local fruitsFound = {}
+    
+    -- Search in common fruit spawn locations
+    local potentialContainers = {
+        workspace:FindFirstChild("Fruits"),
+        workspace:FindFirstChild("Items"),
+        workspace:FindFirstChild("Drops"),
+        workspace:FindFirstChild("SpawnedFruits")
+    }
+    
+    for _, container in ipairs(potentialContainers) do
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if self:IsFruit(item) then
+                    table.insert(fruitsFound, item)
+                end
+            end
+        end
+    end
+    
+    -- Search in workspace directly
+    for _, item in ipairs(workspace:GetChildren()) do
+        if self:IsFruit(item) then
+            table.insert(fruitsFound, item)
+        end
+    end
+    
+    return fruitsFound
+end
+
+-- Fruit identification
+function ESP:IsFruit(object)
+    -- Check common fruit indicators
+    if not object:IsA("Model") then return false end
+    
+    local fruitIndicators = {
+        -- Original fruits
+        "Fruit", "Blox Fruit", "Devil Fruit", "Gomu", "Bara", "Bomu", "Kilo", "Spin", "Bird", 
+        "Smoke", "Flame", "Ice", "Sand", "Dark", "Diamond", "Light", "Rubber", "Barrier", 
+        "Magma", "Quake", "Love", "Spider", "Sound", "Phoenix", "Rumble", "Pain", "Gravity", "Venom",
+        
+        -- Missing fruits you mentioned
+        "Buddha", "Lightning", "Blizzard", "Mammoth", "T-Rex", "Dough", "Shadow", "Gas", 
+        "Control", "Spirit", "Tiger", "Leopard", "Yeti", "Kitsune", "Dragon",
+        
+        -- Additional variations
+        "Human", "Buddha", "Dragon", "Leopard", "Tiger", "Mammoth", "Trex"
+    }
+    
+    local objectName = object.Name:lower()
+    
+    for _, indicator in ipairs(fruitIndicators) do
+        if string.find(objectName, indicator:lower()) then
+            return true
+        end
+    end
+    
+    -- Check for fruit-like structure
+    if object:FindFirstChild("Handle") or object:FindFirstChild("Part") then
+        if object:FindFirstChildOfClass("MeshPart") then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- Create ESP for a fruit
+function ESP:CreateFruitESP(fruit)
+    if self.ESPObjects[fruit] then return end
+    
+    local fruitColor = self:GetFruitColor(fruit.Name)
+    
+    local highlight = Instance.new("Highlight")
+    highlight.FillTransparency = 0.9
+    highlight.OutlineColor = fruitColor
+    highlight.OutlineTransparency = 0
+    highlight.FillColor = fruitColor
+    highlight.Adornee = fruit
+    highlight.Parent = fruit
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.new(0, 150, 0, 50)
+    billboard.StudsOffset = Vector3.new(0, 4, 0)
+    billboard.Adornee = fruit.PrimaryPart or fruit:FindFirstChild("Handle") or fruit:FindFirstChild("Part")
+    billboard.AlwaysOnTop = true
+    billboard.Parent = fruit
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 0.7
+    label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    label.Text = fruit.Name
+    label.TextColor3 = fruitColor
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = billboard
+    
+    -- Add distance label
+    local distanceBillboard = Instance.new("BillboardGui")
+    distanceBillboard.Size = UDim2.new(0, 100, 0, 30)
+    distanceBillboard.StudsOffset = Vector3.new(0, 6, 0)
+    distanceBillboard.Adornee = fruit.PrimaryPart or fruit:FindFirstChild("Handle") or fruit:FindFirstChild("Part")
+    distanceBillboard.AlwaysOnTop = true
+    distanceBillboard.Parent = fruit
+    
+    local distanceLabel = Instance.new("TextLabel")
+    distanceLabel.Size = UDim2.new(1, 0, 1, 0)
+    distanceLabel.BackgroundTransparency = 0.7
+    distanceLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    distanceLabel.Text = "0m"
+    distanceLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    distanceLabel.TextScaled = true
+    distanceLabel.Font = Enum.Font.Gotham
+    distanceLabel.Parent = distanceBillboard
+    
+    self.ESPObjects[fruit] = {
+        Highlight = highlight,
+        Billboard = billboard,
+        DistanceBillboard = distanceBillboard,
+        DistanceLabel = distanceLabel
+    }
+end
+
+-- Remove ESP from fruit
+function ESP:RemoveFruitESP(fruit)
+    if self.ESPObjects[fruit] then
+        for _, obj in pairs(self.ESPObjects[fruit]) do
+            if obj and obj.Parent then
+                obj:Destroy()
+            end
+        end
+        self.ESPObjects[fruit] = nil
+    end
+end
+
+-- Calculate distance between player and fruit
+function ESP:CalculateDistance(fruit)
+    local player = game.Players.LocalPlayer
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        return 0
+    end
+    
+    local fruitRoot = fruit.PrimaryPart or fruit:FindFirstChild("Handle") or fruit:FindFirstChild("Part")
+    if not fruitRoot then
+        return 0
+    end
+    
+    local playerPos = player.Character.HumanoidRootPart.Position
+    local fruitPos = fruitRoot.Position
+    
+    return (playerPos - fruitPos).Magnitude
+end
+
+-- Update ESP display
+function ESP:UpdateESP()
+    if not self.Enabled then return end
+    
+    local currentFruits = self:ScanForFruits()
+    
+    -- Remove ESP from fruits that no longer exist
+    for fruit, espObjects in pairs(self.ESPObjects) do
+        if not fruit:IsDescendantOf(workspace) then
+            self:RemoveFruitESP(fruit)
+        end
+    end
+    
+    -- Add ESP to new fruits
+    for _, fruit in ipairs(currentFruits) do
+        if not self.ESPObjects[fruit] then
+            self:CreateFruitESP(fruit)
+        end
+        
+        -- Update distance labels
+        if self.ESPObjects[fruit] and self.ESPObjects[fruit].DistanceLabel then
+            local distance = self:CalculateDistance(fruit)
+            self.ESPObjects[fruit].DistanceLabel.Text = string.format("%.0fm", distance)
+        end
+    end
+    
+    -- Update UI
+    if self.UI and self.UI.StatusLabel then
+        self.UI.StatusLabel.Text = "Fruits Found: " .. #currentFruits
+        
+        -- Show rarity count if there are fruits
+        if #currentFruits > 0 then
+            local rarityCount = {
+                Common = 0,
+                Uncommon = 0,
+                Rare = 0,
+                Legendary = 0,
+                Mythical = 0
+            }
+            
+            for _, fruit in ipairs(currentFruits) do
+                for fruitPattern, rarity in pairs(FruitRarity) do
+                    if string.find(fruit.Name:lower(), fruitPattern:lower()) then
+                        rarityCount[rarity] = rarityCount[rarity] + 1
+                        break
+                    end
+                end
+            end
+            
+            self.UI.StatusLabel.Text = string.format("Fruits: %d (C:%d U:%d R:%d L:%d M:%d)", 
+                #currentFruits, rarityCount.Common, rarityCount.Uncommon, rarityCount.Rare, 
+                rarityCount.Legendary, rarityCount.Mythical)
+        end
+    end
+end
+
+-- Start ESP system
+function ESP:StartESP()
+    self.ESPObjects = {}
+    
+    -- Initial scan
+    self:UpdateESP()
+    
+    -- Set up recurring scans
+    if self.HeartbeatConnection then
+        self.HeartbeatConnection:Disconnect()
+    end
+    
+    self.HeartbeatConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        self:UpdateESP()
+    end)
+    
+    -- Listen for new fruits
+    if self.WorkspaceChildAdded then
+        self.WorkspaceChildAdded:Disconnect()
+    end
+    
+    self.WorkspaceChildAdded = workspace.ChildAdded:Connect(function(child)
+        wait(0.5) -- Wait a bit for the object to fully load
+        if self:IsFruit(child) then
+            self:CreateFruitESP(child)
+        end
+    end)
+end
+
+-- Stop ESP system
+function ESP:StopESP()
+    if self.HeartbeatConnection then
+        self.HeartbeatConnection:Disconnect()
+        self.HeartbeatConnection = nil
+    end
+    
+    if self.WorkspaceChildAdded then
+        self.WorkspaceChildAdded:Disconnect()
+        self.WorkspaceChildAdded = nil
+    end
+    
+    -- Remove all ESP objects
+    for fruit, espObjects in pairs(self.ESPObjects) do
+        self:RemoveFruitESP(fruit)
+    end
+    
+    self.ESPObjects = {}
+    
+    -- Update UI
+    if self.UI and self.UI.StatusLabel then
+        self.UI.StatusLabel.Text = "Fruits Found: 0"
+    end
+end
+
+-- Initialize the system
+function ESP:Init()
+    self:CreateUI()
+    print("Fruit ESP System Loaded - Use the toggle button to enable/disable")
+    print("Detectable fruits include: Buddha, Lightning, Blizzard, Mammoth, T-Rex, Dough, Shadow, Gas, Control, Spirit, Tiger, Leopard, Yeti, Kitsune, Dragon")
+end
+
+-- Start the system
+ESP:Init()
+
+return ESP
